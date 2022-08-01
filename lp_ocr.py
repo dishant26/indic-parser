@@ -135,10 +135,20 @@ def convert_to_ls(image, tesseract_output, per_level='block_num'):
 def create_hocr(image_path, languages, linput, output_path):
   pytesseract.pytesseract.run_tesseract(image_path, output_path, extension="jpg", lang=languages[linput], config="--psm 4 -c tessedit_create_hocr=1")
 
-def hocr_block(k, hocr_sorted_data, i):
-  bbox = " ".join([str(floor(value)) for value in hocr_sorted_data[k]["box"]])
+def hocr_block(label, k, hocr_sorted_data, i):
+  bbox = " ".join([str(floor(value)) for value in hocr_sorted_data[label]["box"]])
   k = k[:-2]
-  sent = f'   <span class="ocr_sent" title="bbox {bbox};">{k}\n'
+  if label.find('Text') != -1:
+    c = 'sent'
+    sent = f'   <span class="ocr_sent" title="bbox {bbox};">{k}\n'
+  elif label.find('Image') != -1:
+    c = 'image'
+    sent = f'   <span class="ocr_image" title="bbox {bbox};">\n'
+  elif label.find('Table') != -1:
+    c = 'table'
+    sent = f'   <span class="ocr_image" title="bbox {bbox};">\n'
+  else:
+    sent = f'   <span class="ocr_sent" title="bbox {bbox};">{k}\n'
   f = open(f'{output_dir}/layout.hocr', 'a')
   l = [sent]
   f.writelines(l)
@@ -224,9 +234,11 @@ elif infer_flag == "yes":
       img_cropped = img.crop(info_dict["box"])
       res = ocr_agent.detect(img_cropped)
       f.write(res)
-      hocr_data[res] = layout_info_sort[label]
+      q = layout_info_sort[label]
+      q["text"] = res
+      hocr_data[label] = q
     f.close()
-
+  print(hocr_data)
   hocr_sorted_data = {k: v for k, v in sorted(hocr_data.items(), key=lambda item: item[1]["box"][1])}
   with open(f"{output_dir}/hocr_data.json", 'w', encoding='utf-8') as f:
     json.dump(hocr_sorted_data, f, ensure_ascii=False, indent=4)
@@ -251,8 +263,9 @@ elif infer_flag == "yes":
   '''
   f.write(header)
   f.close()
+  print(list(hocr_sorted_data.items()))
   for i, item in enumerate(list(hocr_sorted_data.items())):
-    hocr_block(item[0], hocr_sorted_data, i)
+    hocr_block(item[0], item[1]['text'], hocr_sorted_data, i)
 
   footer = ['  </div>\n',' </body>\n','</html>\n']
   f = open(f'{output_dir}/layout.hocr', 'a')
