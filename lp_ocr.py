@@ -136,21 +136,14 @@ def create_hocr(image_path, languages, linput, output_path):
   pytesseract.pytesseract.run_tesseract(image_path, output_path, extension="jpg", lang=languages[linput], config="--psm 4 -c tessedit_create_hocr=1")
 
 def hocr_block(k, hocr_sorted_data, i):
-  carea = f'''   <div class='ocr_carea' id='block_1_{i+1}'>\n'''
-  par = f'''    <p class='ocr_par' id='par_1_{i+1}' lang='san'>\n'''
   bbox = " ".join([str(floor(value)) for value in hocr_sorted_data[k]["box"]])
-  conf = str(floor(hocr_sorted_data[k]["confidence"] * 100))
-  line = f'''     <span class='ocr_line' id='line_1_{i+1}' title="bbox {bbox}; x_conf {conf}">\n'''
-  words = k.strip().split(" ")
-  word_list = []
-  for n,w in enumerate(words):
-    word_list.append(f'''      <span class='ocrx_word' id='word_1_{n+1}'>{w}</span>\n''')
-  
+  k = k[:-2]
+  sent = f'   <span class="ocr_sent" title="bbox {bbox};">{k}\n'
   f = open(f'{output_dir}/layout.hocr', 'a')
-  l = [carea, par, line]
+  l = [sent]
   f.writelines(l)
-  f.writelines(word_list)
-  f.writelines(['     </span>\n','    </p>\n','   </div>\n'])
+  # f.writelines(word_list)
+  f.writelines(['   </span>\n'])
   f.close()
  
 
@@ -222,7 +215,7 @@ if infer_flag == "no":
   print("OCR is complete. Please find the output in the provided output directory.")
 
 elif infer_flag == "yes":
-  img, layout_info = infer_layout(output_dir)
+  img, layout_info, im_name, im_shape = infer_layout(output_dir)
   #sorting layout_info by y_1 coordinate
   hocr_data = {}
   layout_info_sort = {k: v for k, v in sorted(layout_info.items(), key=lambda item: item[1]["box"][1], reverse=True)}
@@ -234,26 +227,27 @@ elif infer_flag == "yes":
       hocr_data[res] = layout_info_sort[label]
     f.close()
 
-  hocr_sorted_data = {k: v for k, v in sorted(hocr_data.items(), key=lambda item: item[1]["box"][1], reverse=True)}
+  hocr_sorted_data = {k: v for k, v in sorted(hocr_data.items(), key=lambda item: item[1]["box"][1])}
   with open(f"{output_dir}/hocr_data.json", 'w', encoding='utf-8') as f:
     json.dump(hocr_sorted_data, f, ensure_ascii=False, indent=4)
   
   print("OCR is complete. Please find the output in the provided output directory.")
 
   f = open(f'{output_dir}/layout.hocr', 'w+')
-  header = '''
-  <?xml version="1.0" encoding="UTF-8"?>
-  <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
-      "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
-  <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
-  <head>
-    <title></title>
-    <meta http-equiv="Content-Type" content="text/html;charset=utf-8"/>
-    <meta name='ocr-system' content='tesseract v5.0.1.20220118' />
-    <meta name='ocr-capabilities' content='ocr_page ocr_carea ocr_par ocr_line ocrx_word ocrp_wconf'/>
-  </head>
-  <body>
-    <div class='ocr_page' id='page_1'>
+  header = f'''
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html lang="en" xml:lang="en" xmlns="http://www.w3.org/1999/xhtml">
+ <head>
+  <title>
+  </title>
+  <meta content="text/html;charset=utf-8" http-equiv="Content-Type"/>
+  <meta content="tesseract 5.0.0-alpha-20201231-256-g73a32" name="ocr-system"/>
+  <meta content="ocr_page ocr_carea ocr_par ocr_line ocrx_word ocrp_wconf" name="ocr-capabilities"/>
+ </head>
+ <body>
+  <div class="ocr_page" id="page_1" title='image "{im_name}"; bbox 0 0 {im_shape[0]} {im_shape[1]}; ppageno 0'>
   '''
   f.write(header)
   f.close()
