@@ -114,6 +114,7 @@ def infer_layout(output_dir):
   predictor = DefaultPredictor(cfg)
   im = cv2.imread(input_image_path)
   im_name = input_image_path.split("/")[-1]
+  im_shape = im.shape[:2]
   cv2.imwrite(f"{output_dir}/{im_name}", im)
   outputs = predictor(im)
   #print(outputs["instances"].pred_classes)
@@ -165,7 +166,7 @@ def infer_layout(output_dir):
   with open(f"{output_dir}/layout_data.json", 'w', encoding='utf-8') as f:
     json.dump(layout_info_sort, f, ensure_ascii=False, indent=4)
 
-  return img, layout_info
+  return img, layout_info, im_name, im_shape
 
 if __name__ == "__main__":
     infer_layout()

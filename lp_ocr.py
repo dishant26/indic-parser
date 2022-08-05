@@ -135,22 +135,25 @@ def convert_to_ls(image, tesseract_output, per_level='block_num'):
 def create_hocr(image_path, languages, linput, output_path):
   pytesseract.pytesseract.run_tesseract(image_path, output_path, extension="jpg", lang=languages[linput], config="--psm 4 -c tessedit_create_hocr=1")
 
-def hocr_block(k, hocr_sorted_data, i):
-  carea = f'''   <div class='ocr_carea' id='block_1_{i+1}'>\n'''
-  par = f'''    <p class='ocr_par' id='par_1_{i+1}' lang='san'>\n'''
-  bbox = " ".join([str(floor(value)) for value in hocr_sorted_data[k]["box"]])
-  conf = str(floor(hocr_sorted_data[k]["confidence"] * 100))
-  line = f'''     <span class='ocr_line' id='line_1_{i+1}' title="bbox {bbox}; x_conf {conf}">\n'''
-  words = k.strip().split(" ")
-  word_list = []
-  for n,w in enumerate(words):
-    word_list.append(f'''      <span class='ocrx_word' id='word_1_{n+1}'>{w}</span>\n''')
-  
+def hocr_block(label, k, hocr_sorted_data, i):
+  bbox = " ".join([str(floor(value)) for value in hocr_sorted_data[label]["box"]])
+  k = k[:-2]
+  if label.find('Text') != -1:
+    c = 'sent'
+    sent = f'   <span class="ocr_sent" title="bbox {bbox};">{k}\n'
+  elif label.find('Image') != -1:
+    c = 'image'
+    sent = f'   <span class="ocr_image" title="bbox {bbox};">\n'
+  elif label.find('Table') != -1:
+    c = 'table'
+    sent = f'   <span class="ocr_image" title="bbox {bbox};">\n'
+  else:
+    sent = f'   <span class="ocr_sent" title="bbox {bbox};">{k}\n'
   f = open(f'{output_dir}/layout.hocr', 'a')
-  l = [carea, par, line]
+  l = [sent]
   f.writelines(l)
-  f.writelines(word_list)
-  f.writelines(['     </span>\n','    </p>\n','   </div>\n'])
+  # f.writelines(word_list)
+  f.writelines(['   </span>\n'])
   f.close()
  
 
@@ -222,7 +225,7 @@ if infer_flag == "no":
   print("OCR is complete. Please find the output in the provided output directory.")
 
 elif infer_flag == "yes":
-  img, layout_info = infer_layout(output_dir)
+  img, layout_info, im_name, im_shape = infer_layout(output_dir)
   #sorting layout_info by y_1 coordinate
   hocr_data = {}
   layout_info_sort = {k: v for k, v in sorted(layout_info.items(), key=lambda item: item[1]["box"][1], reverse=True)}
@@ -231,34 +234,38 @@ elif infer_flag == "yes":
       img_cropped = img.crop(info_dict["box"])
       res = ocr_agent.detect(img_cropped)
       f.write(res)
-      hocr_data[res] = layout_info_sort[label]
+      q = layout_info_sort[label]
+      q["text"] = res
+      hocr_data[label] = q
     f.close()
-
-  hocr_sorted_data = {k: v for k, v in sorted(hocr_data.items(), key=lambda item: item[1]["box"][1], reverse=True)}
+  print(hocr_data)
+  hocr_sorted_data = {k: v for k, v in sorted(hocr_data.items(), key=lambda item: item[1]["box"][1])}
   with open(f"{output_dir}/hocr_data.json", 'w', encoding='utf-8') as f:
     json.dump(hocr_sorted_data, f, ensure_ascii=False, indent=4)
   
   print("OCR is complete. Please find the output in the provided output directory.")
 
   f = open(f'{output_dir}/layout.hocr', 'w+')
-  header = '''
-  <?xml version="1.0" encoding="UTF-8"?>
-  <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
-      "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
-  <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
-  <head>
-    <title></title>
-    <meta http-equiv="Content-Type" content="text/html;charset=utf-8"/>
-    <meta name='ocr-system' content='tesseract v5.0.1.20220118' />
-    <meta name='ocr-capabilities' content='ocr_page ocr_carea ocr_par ocr_line ocrx_word ocrp_wconf'/>
-  </head>
-  <body>
-    <div class='ocr_page' id='page_1'>
+  header = f'''
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html lang="en" xml:lang="en" xmlns="http://www.w3.org/1999/xhtml">
+ <head>
+  <title>
+  </title>
+  <meta content="text/html;charset=utf-8" http-equiv="Content-Type"/>
+  <meta content="tesseract 5.0.0-alpha-20201231-256-g73a32" name="ocr-system"/>
+  <meta content="ocr_page ocr_carea ocr_par ocr_line ocrx_word ocrp_wconf" name="ocr-capabilities"/>
+ </head>
+ <body>
+  <div class="ocr_page" id="page_1" title='image "{im_name}"; bbox 0 0 {im_shape[0]} {im_shape[1]}; ppageno 0'>
   '''
   f.write(header)
   f.close()
+  print(list(hocr_sorted_data.items()))
   for i, item in enumerate(list(hocr_sorted_data.items())):
-    hocr_block(item[0], hocr_sorted_data, i)
+    hocr_block(item[0], item[1]['text'], hocr_sorted_data, i)
 
   footer = ['  </div>\n',' </body>\n','</html>\n']
   f = open(f'{output_dir}/layout.hocr', 'a')
